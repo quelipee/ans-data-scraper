@@ -8,10 +8,11 @@ class Scraper:
     def __init__(self, url: str):
         self.url = url
 
-    def run(self):
+    def run(self) -> list:
         # é uma biblioteca que analisa e munipulacao de html e xml
         # transforma elementos html em um objeto manipulavel
 
+        anexo_response = []
         response = requests.get(self.url)
         # pegando o texto da request, e assim utilizando o beautifulsoup para manipular os elementos
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -30,4 +31,7 @@ class Scraper:
                 else:
                     with open('./code/web_scraping/' + link.text + 'pdf', 'wb') as f:
                         f.write(pdf_response.content)
-        return None
+                    anexo_response.append(link.text + 'pdf')
+        return anexo_response
+
+
