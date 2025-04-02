@@ -26,12 +26,12 @@ class Scraper:
             if "Anexo I." in link.text or "Anexo II." in link.text:
                 pdf_url = link['href']
                 pdf_response = requests.get(pdf_url)
-                if os.path.exists('./code/web_scraping/' + link.text + 'pdf'):
+                if os.path.exists('./code/web_scraping/' + link.text + 'pdf') or os.path.exists(
+                        './code/web_scraping/'+ os.getenv('ZIP_NAME')):
                     print('PDF ' + link.text + ' already exists')
+                    anexo_response.append(link.text + 'pdf')
                 else:
                     with open('./code/web_scraping/' + link.text + 'pdf', 'wb') as f:
                         f.write(pdf_response.content)
                     anexo_response.append(link.text + 'pdf')
         return anexo_response
-
-
