@@ -1,17 +1,19 @@
 import pandas as pd
-import mysql.connector
+import unicodedata
+
+from code.database.DBCreateTable import DBCreateTable
 from code.database.DBconfig import Dbconfig
 
 
 class ANSDataProcessor(Dbconfig):
-    def __init__(self, db_config, host: str, user: str, password: str, dbname: str):
+    def __init__(self, host: str, user: str, password: str, dbname: str):
         super().__init__(host, user, password, dbname)
 
     def create_table(self):
-        conn = self.connect(self.host, self.user, self.password,self.dbname)
+        conn = self.connect(self.host, self.user, self.password, self.dbname)
 
         cursor = conn.cursor()
-        ANSDataProcessor.create_table_operadoras(cursor)
+        DBCreateTable.create_table(cursor)
 
         csv_file_relatorio = './code/database/Relatorio_cadop.csv'
         df = pd.read_csv(csv_file_relatorio, sep=';')
@@ -21,82 +23,68 @@ class ANSDataProcessor(Dbconfig):
         df = df.where(pd.notnull(df), None)
 
         for __, row in df.iterrows():
-            row_dict = row.to_dict() # criando um dicionario com cada linha ou array, assim ficando mais facil de alterar algo
-            values = [None if pd.isna(val) else val for val in row_dict.values()] # verificando se um campo esta vazio, se estvier vai voltar none
+            row_dict = row.to_dict()  # criando um dicionario com cada linha ou array, assim ficando mais facil de alterar algo
+            values = [None if pd.isna(val) else val for val in
+                      row_dict.values()]  # verificando se um campo esta vazio, se estvier vai voltar none
             cursor.execute(
                 """
-                INSERT INTO ans_operadoras (
-                    Registro_ANS,
-                    CNPJ,
-                    Razao_Social,
-                    Nome_Fantasia,
-                    Modalidade,
-                    Logradouro,
-                    Numero,
-                    Complemento,
-                    Bairro,
-                    Cidade,
-                    UF,
-                    CEP,
-                    DDD,
-                    Telefone,
-                    Fax,
-                    Endereco_eletronico,
-                    Representante,
-                    Cargo_Representante,
-                    Regiao_de_Comercializacao,
-                    Data_Registro_ANS
+                INSERT IGNORE INTO ans_operadoras (
+                    Registro_ANS,CNPJ,Razao_Social,Nome_Fantasia,Modalidade,Logradouro,Numero,Complemento,
+                    Bairro,Cidade,UF,CEP, DDD,Telefone,Fax,Endereco_eletronico,Representante,Cargo_Representante,
+                    Regiao_de_Comercializacao,Data_Registro_ANS
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 values
             )
         conn.commit()
+
+        for k in range(3,5):
+            for i in range(1, 5):
+                csv_file = f'./code/database/202{k}/' + str(i) + f'T202{k}/' + str(i) + f'T202{k}.csv'
+                df = pd.read_csv(csv_file, sep=';')
+                df['DESCRICAO'] = df['DESCRICAO'].apply(self.remover_acentos)
+                df['DATA'] = pd.to_datetime(df['DATA'], dayfirst=True).dt.strftime('%Y-%m-%d')
+
+                data_batch = []
+                batch_size = 20000  # Tamanho do lote
+
+                for __, row in df.iterrows():
+                    row_dict = row.to_dict()
+                    values = [None if pd.isna(val) else val for val in row_dict.values()]
+                    data_batch.append(values)  # inserindo os valores
+
+                    if len(data_batch) == batch_size:  # verifica se a quantidade de querys é igual a 20000 assim para executar o insert
+                        cursor.executemany(
+                            """
+                            INSERT IGNORE INTO despesas_operadoras (
+                                DATA, REG_ANS, CD_CONTA_CONTABIL, DESCRICAO, VL_SALDO_INICIAL, VL_SALDO_FINAL
+                            ) VALUES (%s, %s, %s, %s, %s, %s)
+                            """,
+                            data_batch
+                        )
+                        conn.commit()
+                        data_batch = []  # limpa o lote
+
+                # Inserção final para o que sobrou, caso nao tenha 1000 arquivos
+                if data_batch:
+                    cursor.executemany(
+                        """
+                        INSERT IGNORE INTO despesas_operadoras (
+                            DATA, REG_ANS, CD_CONTA_CONTABIL, DESCRICAO, VL_SALDO_INICIAL, VL_SALDO_FINAL
+                        ) VALUES (%s, %s, %s, %s, %s, %s)
+                        """,
+                        data_batch
+                    )
+                    conn.commit()
+
         cursor.close()
         conn.close()
 
+
         print('Dados com sucesso!')
 
-        # for i in range(1, 5):
-        #     csv_file = './code/database/2023/' + str(i) + 'T2023'
-        #     df = pd.read_csv(csv_file)
-
-    @staticmethod
-    def create_table_operadoras(cursor):
-        tabela_sql = """
-                CREATE TABLE IF NOT EXISTS ans_operadoras (
-                Registro_ANS INT PRIMARY KEY,
-                CNPJ VARCHAR(14) NOT NULL,
-                Razao_Social VARCHAR(255) NOT NULL,
-                Nome_Fantasia VARCHAR(255),
-                Modalidade VARCHAR(100),
-                Logradouro VARCHAR(255),
-                Numero VARCHAR(20),
-                Complemento VARCHAR(100),
-                Bairro VARCHAR(100),
-                Cidade VARCHAR(100),
-                UF CHAR(2),
-                CEP VARCHAR(8),
-                DDD CHAR(32),
-                Telefone VARCHAR(20),
-                Fax VARCHAR(20),
-                Endereco_eletronico VARCHAR(255),
-                Representante VARCHAR(255),
-                Cargo_Representante VARCHAR(100),
-                Regiao_de_Comercializacao INT,
-                Data_Registro_ANS DATE
-                )"""
-
-        tabela_sql_despesas = """
-                CREATE TABLE IF NOT EXISTS despesas_operadoras (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                DATA DATE NOT NULL,
-                REG_ANS INT NOT NULL,
-                CD_CONTA_CONTABIL VARCHAR(10) NOT NULL,
-                DESCRICAO VARCHAR(255) NOT NULL,
-                VL_SALDO_INICIAL DECIMAL(15,2),
-                VL_SALDO_FINAL DECIMAL(15,2),
-                FOREIGN KEY (REG_ANS) REFERENCES operadoras(Registro_ANS)
-            )"""
-        cursor.execute(tabela_sql)
-        cursor.execute(tabela_sql_despesas)
+    def remover_acentos(self, texto):
+        if pd.isna(texto):
+            return texto
+        return unicodedata.normalize('NFKD', str(texto)).encode('ASCII', 'ignore').decode('ASCII').strip()
 

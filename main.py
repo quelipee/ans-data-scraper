@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 
 from code.data_transformation.Extract import Extract
 from code.database.ANSDataProcessor import ANSDataProcessor
+from code.database.QueryTopOperators import QueryTopOperators
 from code.web_scraping.Compactador import Compactador
 from code.web_scraping.Scraper import Scraper
 import os
@@ -18,5 +19,14 @@ import os
 # extract = Extract(return_scraper,compact_name)
 # extract.extract_data()
 
-ansData = ANSDataProcessor('','127.0.0.1', 'root', 'root','ans_operadoras')
-ansData.create_table()
+dbconfig = {
+    'host' : '127.0.0.1',
+    'user' : 'root',
+    'password' : 'root',
+    'dbname' : 'ans_operadoras',
+}
+# ansData = ANSDataProcessor(**dbconfig)
+# ansData.create_table()
+query_last_quarter = QueryTopOperators(**dbconfig)
+# query_last_quarter.get_top_10_expenses_last_quarter()
+query_last_quarter.get_top_10_expenses_last_year()
